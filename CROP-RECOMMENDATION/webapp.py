@@ -68,6 +68,34 @@ def predict_crop(nitrogen, phosphorus, potassium, temperature, humidity, ph, rai
     prediction = RF_Model_pkl.predict(np.array([nitrogen, phosphorus, potassium, temperature, humidity, ph, rainfall]).reshape(1, -1))
     return prediction
 
+def validate_npk_combination(n, p, k):
+    """Validate if NPK combination is agriculturally realistic"""
+    total_npk = n + p + k
+    if total_npk > 300:
+        return False, "⚠️ NPK combination too high (>300) - may be toxic to plants"
+    
+    # Check for extremely imbalanced ratios
+    if n > 0 and p > 0 and k > 0:
+        max_val = max(n, p, k)
+        min_val = min(n, p, k)
+        if max_val / min_val > 15:
+            return False, "⚠️ Nutrient ratio is too imbalanced - may harm plant growth"
+    
+    return True, ""
+
+def get_npk_warning(n, p, k):
+    """Generate warning messages for high NPK values"""
+    warnings = []
+    
+    if n > 120:
+        warnings.append("Very high Nitrogen - may cause excessive leaf growth")
+    if p > 120:
+        warnings.append("Very high Phosphorus - may inhibit other nutrient uptake")
+    if k > 180:
+        warnings.append("Very high Potassium - may cause salt stress")
+    
+    return warnings
+
 ## Streamlit code for the web app interface
 def main():  
     # # Setting the title of the web app
@@ -91,8 +119,27 @@ def main():
         if not inputs.any() or np.isnan(inputs).any() or (inputs == 0).all():
             st.error("Please fill in all input fields with valid values before predicting.")
         else:
-            prediction = predict_crop(nitrogen, phosphorus, potassium, temperature, humidity, ph, rainfall)
-            st.success(f"The recommended crop is: {prediction[0]}")
+            # Validate NPK combination first
+            is_valid, npk_error = validate_npk_combination(nitrogen, phosphorus, potassium)
+            if not is_valid:
+                st.error(npk_error)
+                st.info("💡 Tip: Try more balanced NPK values. Most crops need N:P:K ratios between 1:1:1 to 4:2:3")
+            else:
+                # Show warnings for high values
+                warnings = get_npk_warning(nitrogen, phosphorus, potassium)
+                if warnings:
+                    st.warning("⚠️ **Agricultural Advisory:**")
+                    for warning in warnings:
+                        st.write(f"• {warning}")
+                    st.write("**Recommendation:** Consider soil testing before applying these nutrient levels.")
+                
+                # Make prediction
+                prediction = predict_crop(nitrogen, phosphorus, potassium, temperature, humidity, ph, rainfall)
+                st.success(f"🌱 **Recommended crop:** {prediction[0]}")
+                
+                # Show additional info for extreme cases
+                if nitrogen == 140 and phosphorus == 140 and potassium == 140:
+                    st.info("📋 **Note:** This NPK combination (140,140,140) is found in the training data but may not be practical for most farming situations.")
 
 
 ## Running the main function
